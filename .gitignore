@@ -59,6 +59,7 @@ randn_vpn-main-*.tgz
 #    В репо держим ТОЛЬКО .gitkeep, остальное игнорим
 # ─────────────────────────────────────────────
 setup/opt/randn_vpn-main/client/*
+!setup/opt/randn_vpn-main/temp/
 
 setup/opt/randn_vpn-main/temp/*
 !setup/opt/randn_vpn-main/temp/.gitkeep
