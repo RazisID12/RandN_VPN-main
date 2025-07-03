@@ -1,0 +1,20 @@
+[Unit]
+Description=RandN_VPN-main
+After=multi-user.target
+Wants=multi-user.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/randn_vpn-main
+ExecStartPre=/opt/randn_vpn-main/up.sh
+ExecStart=/opt/randn_vpn-main/proxy.py
+ExecStop=/opt/randn_vpn-main/down.sh
+ExecStopPost=-/bin/sleep 1
+Restart=on-failure
+RestartSec=3
+LimitNPROC=infinity
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

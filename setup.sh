@@ -1,0 +1,541 @@
+#!/bin/bash
+#
+# Скрипт для установки на своём сервере RandN_VPN-main
+#
+#
+#
+
+export LC_ALL=C
+
+#
+# Проверка прав root
+if [[ "$EUID" -ne 0 ]]; then
+	echo 'Error: You need to run this as root!'
+	exit 2
+fi
+
+cd /opt
+
+#
+# Проверка на OpenVZ и LXC
+if [[ "$(systemd-detect-virt)" == "openvz" || "$(systemd-detect-virt)" == "lxc" ]]; then
+	echo 'Error: OpenVZ and LXC are not supported!'
+	exit 3
+fi
+
+#
+# Проверка версии системы
+OS="$(lsb_release -si | tr '[:upper:]' '[:lower:]')"
+VERSION="$(lsb_release -rs | cut -d '.' -f1)"
+
+if [[ "$OS" == "debian" ]]; then
+	if [[ $VERSION -lt 11 ]]; then
+		echo 'Error: Your Debian version is not supported!'
+		exit 4
+	fi
+elif [[ "$OS" == "ubuntu" ]]; then
+	if [[ $VERSION -lt 22 ]]; then
+		echo 'Error: Your Ubuntu version is not supported!'
+		exit 5
+	fi
+elif [[ "$OS" != "debian" ]] && [[ "$OS" != "ubuntu" ]]; then
+	echo 'Error: Your Linux version is not supported!'
+	exit 6
+fi
+
+#
+# Проверка свободного места (минимум 2Гб)
+if [[ $(df --output=avail / | tail -n 1) -lt $((2 * 1024 * 1024)) ]]; then
+	echo 'Error: Low disk space! You need 2GB of free space!'
+	exit 7
+fi
+
+echo
+echo -e '\e[1;32mInstalling RandN_VPN-main (split + full VPN)...\e[0m'
+echo 'OpenVPN + WireGuard + AmneziaWG'
+echo 'More details: https://github.com/RazisID12/RandN_VPN-main'
+
+#
+# Спрашиваем о настройках
+echo
+echo 'Choose censorship patch for OpenVPN (UDP only):'
+echo '    0) None        - Do not install censorship patch, or remove if already installed'
+echo '    1) Strong      - Recommended by default'
+echo '    2) Error-free  - Use if Strong patch causes connection error, recommended for Mikrotik routers'
+until [[ "$OPENVPN_PATCH" =~ ^[0-2]$ ]]; do
+	read -rp 'Version choice [0-2]: ' -e -i 1 OPENVPN_PATCH
+done
+echo
+echo 'OpenVPN DCO lowers CPU load, boosts data speeds, and only supports AES-128-GCM, AES-256-GCM and CHACHA20-POLY1305 encryption'
+until [[ "$OPENVPN_DCO" =~ (y|n) ]]; do
+	read -rp 'Turn on OpenVPN DCO? [y/n]: ' -e -i y OPENVPN_DCO
+done
+echo
+echo -e 'Choose DNS resolvers for \e[1;32mRandN_sVPN-main\e[0m (RandN_sVPN-main-*):'
+echo '    1) Cloudflare+Quad9  - Recommended by default'
+echo '       +Russian *'
+echo '    2) Cloudflare+Quad9  - Use if default choice fails to resolve domains'
+echo '    3) Comss **          - More details: https://comss.ru/disqus/page.php?id=7315'
+echo '    4) Xbox **           - More details: https://xbox-dns.ru'
+echo '    5) Malw **           - More details: https://info.dns.malw.link'
+echo
+echo '  * - Resolvers optimized for users in Russia'
+echo ' ** - Enable additional proxying and hide this server IP on some internet resources'
+echo '      Use only if this server is geolocated in Russia or problems accessing some internet resources'
+until [[ "$RANDN_SVPN-MAIN_DNS" =~ ^[1-4]$ ]]; do
+	read -rp 'DNS choice [1-4]: ' -e -i 1 RANDN_SVPN-MAIN_DNS
+done
+echo
+echo -e 'Choose DNS resolvers for \e[1;32mRandN_fVPN-main\e[0m (RandN_fVPN-main-*):'
+echo '    1) Cloudflare  - Recommended by default'
+echo '    2) Quad9       - Use if Cloudflare fails to resolve domains'
+echo '    3) Google *    - Use if Cloudflare/Quad9 fails to resolve domains'
+echo '    4) AdGuard *   - Use for blocking ads, trackers, malware and phishing websites'
+echo '    5) Comss **    - More details: https://comss.ru/disqus/page.php?id=7315'
+echo '    6) Xbox **     - More details: https://xbox-dns.ru'
+echo '    7) Malw **     - More details: https://info.dns.malw.link'
+echo
+echo '  * - Resolvers supports EDNS Client Subnet'
+echo ' ** - Enable additional proxying and hide this server IP on some internet resources'
+echo '      Use only if this server is geolocated in Russia or problems accessing some internet resources'
+until [[ "$RANDN_FVPN-MAIN_DNS" =~ ^[1-6]$ ]]; do
+	read -rp 'DNS choice [1-6]: ' -e -i 1 RANDN_FVPN-MAIN_DNS
+done
+echo
+until [[ "$BLOCK_ADS" =~ (y|n) ]]; do
+	read -rp $'Enable blocking ads, trackers, malware and phishing websites in \001\e[1;32m\002RandN_sVPN-main\001\e[0m\002 (RandN_sVPN-main-*) based on AdGuard and OISD rules? [y/n]: ' -e -i y BLOCK_ADS
+done
+echo
+echo 'Default IP address range:      10.28.0.0/14'
+echo 'Alternative IP address range: 172.28.0.0/14'
+until [[ "$ALTERNATIVE_IP" =~ (y|n) ]]; do
+	read -rp 'Use alternative range of IP addresses? [y/n]: ' -e -i n ALTERNATIVE_IP
+done
+echo
+until [[ "$OPENVPN_5080_5443_TCP" =~ (y|n) ]]; do
+	read -rp 'Use TCP ports 5080 and 5443 as backup for OpenVPN connections? [y/n]: ' -e -i y OPENVPN_5080_5443_TCP
+done
+echo
+until [[ "$OPENVPN_5080_5443_UDP" =~ (y|n) ]]; do
+	read -rp 'Use UDP ports 5080 and 5443 as backup for OpenVPN connections? [y/n]: ' -e -i y OPENVPN_5080_5443_UDP
+done
+echo
+until [[ "$OPENVPN_DUPLICATE" =~ (y|n) ]]; do
+	read -rp 'Allow multiple clients connecting to OpenVPN using same profile file (*.ovpn)? [y/n]: ' -e -i y OPENVPN_DUPLICATE
+done
+echo
+until [[ "$OPENVPN_LOG" =~ (y|n) ]]; do
+	read -rp 'Enable detailed logs in OpenVPN? [y/n]: ' -e -i n OPENVPN_LOG
+done
+echo
+until [[ "$SSH_PROTECTION" =~ (y|n) ]]; do
+	read -rp 'Enable SSH brute-force protection? [y/n]: ' -e -i y SSH_PROTECTION
+done
+echo
+echo "Warning! Network attack and scan protection may block VPN or third-party applications!"
+until [[ "$ATTACK_PROTECTION" =~ (y|n) ]]; do
+	read -rp 'Enable network attack and scan protection? [y/n]: ' -e -i y ATTACK_PROTECTION
+done
+echo
+while read -rp 'Enter valid domain name for this OpenVPN server or press Enter to skip: ' -e OPENVPN_HOST
+do
+	[[ -z "$OPENVPN_HOST" ]] && break
+	[[ -n $(getent ahostsv4 "$OPENVPN_HOST") ]] && break
+done
+echo
+while read -rp 'Enter valid domain name for this WireGuard/AmneziaWG server or press Enter to skip: ' -e WIREGUARD_HOST
+do
+	[[ -z "$WIREGUARD_HOST" ]] && break
+	[[ -n $(getent ahostsv4 "$WIREGUARD_HOST") ]] && break
+done
+echo
+until [[ "$ROUTE_ALL" =~ (y|n) ]]; do
+	read -rp $'Route all traffic for domains via \001\e[1;32m\002RandN_sVPN-main\001\e[0m\002, excluding Russian domains and domains from exclude-hosts.txt? [y/n]: ' -e -i n ROUTE_ALL
+done
+echo
+until [[ "$DISCORD_INCLUDE" =~ (y|n) ]]; do
+	read -rp $'Include Discord voice IPs in \001\e[1;32m\002RandN_sVPN-main\001\e[0m\002? [y/n]: ' -e -i y DISCORD_INCLUDE
+done
+echo
+until [[ "$CLOUDFLARE_INCLUDE" =~ (y|n) ]]; do
+	read -rp $'Include Cloudflare IPs in \001\e[1;32m\002RandN_sVPN-main\001\e[0m\002? [y/n]: ' -e -i y CLOUDFLARE_INCLUDE
+done
+echo
+until [[ "$AMAZON_INCLUDE" =~ (y|n) ]]; do
+	read -rp $'Include Amazon IPs in \001\e[1;32m\002RandN_sVPN-main\001\e[0m\002? [y/n]: ' -e -i n AMAZON_INCLUDE
+done
+echo
+until [[ "$HETZNER_INCLUDE" =~ (y|n) ]]; do
+	read -rp $'Include Hetzner IPs in \001\e[1;32m\002RandN_sVPN-main\001\e[0m\002? [y/n]: ' -e -i n HETZNER_INCLUDE
+done
+echo
+until [[ "$DIGITALOCEAN_INCLUDE" =~ (y|n) ]]; do
+	read -rp $'Include DigitalOcean IPs in \001\e[1;32m\002RandN_sVPN-main\001\e[0m\002? [y/n]: ' -e -i n DIGITALOCEAN_INCLUDE
+done
+echo
+until [[ "$OVH_INCLUDE" =~ (y|n) ]]; do
+	read -rp $'Include OVH IPs in \001\e[1;32m\002RandN_sVPN-main\001\e[0m\002? [y/n]: ' -e -i n OVH_INCLUDE
+done
+echo
+until [[ "$TELEGRAM_INCLUDE" =~ (y|n) ]]; do
+	read -rp $'Include Telegram IPs in \001\e[1;32m\002RandN_sVPN-main\001\e[0m\002? [y/n]: ' -e -i n TELEGRAM_INCLUDE
+done
+echo
+until [[ "$GOOGLE_INCLUDE" =~ (y|n) ]]; do
+	read -rp $'Include Google IPs in \001\e[1;32m\002RandN_sVPN-main\001\e[0m\002? [y/n]: ' -e -i n GOOGLE_INCLUDE
+done
+echo
+until [[ "$AKAMAI_INCLUDE" =~ (y|n) ]]; do
+	read -rp $'Include Akamai IPs in \001\e[1;32m\002RandN_sVPN-main\001\e[0m\002? [y/n]: ' -e -i n AKAMAI_INCLUDE
+done
+echo
+echo 'Preparing for installation, please wait...'
+
+#
+# Ожидание пока выполняется apt-get
+while pidof apt-get &>/dev/null; do
+	echo 'Waiting for apt-get to finish...';
+	sleep 5;
+done
+
+#
+# Отключим фоновые обновления системы
+systemctl stop unattended-upgrades &>/dev/null
+systemctl stop apt-daily.timer &>/dev/null
+systemctl stop apt-daily-upgrade.timer &>/dev/null
+
+#
+# Удаление или перемещение файлов и папок при обновлении
+systemctl stop openvpn-generate-keys &>/dev/null
+systemctl disable openvpn-generate-keys &>/dev/null
+systemctl stop dnsmap &>/dev/null
+systemctl disable dnsmap &>/dev/null
+systemctl stop ferm &>/dev/null
+systemctl disable ferm &>/dev/null
+
+rm -f /etc/sysctl.d/10-conntrack.conf
+rm -f /etc/sysctl.d/20-network.conf
+rm -f /etc/sysctl.d/99-RandN_VPN-main.conf
+rm -f /etc/systemd/network/eth.network
+rm -f /etc/systemd/network/host.network
+rm -f /etc/systemd/system/openvpn-generate-keys.service
+rm -f /etc/systemd/system/dnsmap.service
+#rm -f /etc/apt/sources.list.d/amnezia*
+#rm -f /usr/share/keyrings/amnezia.gpg
+rm -f /usr/share/keyrings/cznic-labs-pkg.gpg
+rm -f /opt/upgrade.sh
+rm -f /opt/generate.sh
+rm -f /opt/Enable-OpenVPN-DCO.sh
+rm -f /opt/upgrade-openvpn.sh
+rm -f /opt/create-swap.sh
+rm -f /opt/disable-openvpn-dco.sh
+rm -f /opt/enable-openvpn-dco.sh
+rm -f /opt/patch-openvpn.sh
+rm -f /opt/add-client.sh
+rm -f /opt/delete-client.sh
+rm -f /opt/*.ovpn
+rm -f /opt/*.conf
+
+if [[ -d "/opt/easy-rsa-ipsec/easyrsa3/pki" ]]; then
+	mkdir -p /opt/easyrsa3
+	mv -f /opt/easy-rsa-ipsec/easyrsa3/pki /opt/easyrsa3/pki &>/dev/null
+fi
+mv -f /opt/randn_vpn-main/custom.sh /opt/randn_vpn-main/custom-doall.sh &>/dev/null
+
+rm -rf /opt/vpn
+rm -rf /opt/easy-rsa-ipsec
+rm -rf /opt/.gnupg
+rm -rf /opt/dnsmap
+rm -rf /opt/openvpn
+rm -rf /etc/ferm
+
+apt-get purge -y python3-dnslib &>/dev/null
+apt-get purge -y gnupg2 &>/dev/null
+apt-get purge -y ferm &>/dev/null
+apt-get purge -y libpam0g-dev &>/dev/null
+#apt-get purge -y amneziawg &>/dev/null
+apt-get purge -y sshguard &>/dev/null
+
+#
+# Остановим и выключим обновляемые службы
+for service in kresd@ openvpn-server@ wg-quick@; do
+	systemctl list-units --type=service --no-pager | awk -v s="$service" '$1 ~ s"[^.]+\\.service" {print $1}' | xargs -r systemctl stop &>/dev/null
+	systemctl list-unit-files --type=service --no-pager | awk -v s="$service" '$1 ~ s"[^.]+\\.service" {print $1}' | xargs -r systemctl disable &>/dev/null
+done
+
+systemctl stop randn_vpn-main &>/dev/null
+systemctl disable randn_vpn-main &>/dev/null
+
+systemctl stop randn_vpn-main-update &>/dev/null
+systemctl disable randn_vpn-main-update &>/dev/null
+
+systemctl stop randn_vpn-main-update.timer &>/dev/null
+systemctl disable randn_vpn-main-update.timer &>/dev/null
+
+# Остановим и выключим ненужные службы
+systemctl stop firewalld &>/dev/null
+ufw disable &>/dev/null
+
+systemctl disable firewalld &>/dev/null
+systemctl disable ufw &>/dev/null
+
+#
+# Удаляем старые файлы и кеш Knot Resolver
+rm -rf /var/cache/knot-resolver/*
+rm -rf /etc/knot-resolver/*
+rm -rf /var/lib/knot-resolver/*
+
+#
+# Удаляем старые файлы OpenVPN и WireGuard
+rm -rf /etc/openvpn/server/*
+rm -rf /etc/openvpn/client/*
+rm -rf /etc/wireguard/templates/*
+
+#
+# Удаляем скомпилированный патченный OpenVPN
+make -C /usr/local/src/openvpn uninstall &>/dev/null
+rm -rf /usr/local/src/openvpn
+
+#
+# Завершим выполнение скрипта при ошибке
+set -e
+
+#
+# Обработка ошибок
+handle_error() {
+	echo "$(lsb_release -ds) $(uname -r) $(date --iso-8601=seconds)"
+	echo -e "\e[1;31mError at line $1: $2\e[0m"
+	exit 1
+}
+trap 'handle_error $LINENO "$BASH_COMMAND"' ERR
+
+#
+# Обновляем систему
+apt-get clean
+apt-get update
+apt-get dist-upgrade -y
+apt-get install --reinstall -y curl gpg
+
+#
+# Папка для ключей
+mkdir -p /etc/apt/keyrings
+
+#
+# Добавим репозиторий Knot Resolver
+curl -fsSL https://pkg.labs.nic.cz/gpg -o /etc/apt/keyrings/cznic-labs-pkg.gpg
+echo "deb [signed-by=/etc/apt/keyrings/cznic-labs-pkg.gpg] https://pkg.labs.nic.cz/knot-resolver $(lsb_release -cs) main" > /etc/apt/sources.list.d/cznic-labs-knot-resolver.list
+
+#
+# Добавим репозиторий OpenVPN
+curl -fsSL https://swupdate.openvpn.net/repos/repo-public.gpg | gpg --dearmor > /etc/apt/keyrings/openvpn-repo-public.gpg
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/openvpn-repo-public.gpg] https://build.openvpn.net/debian/openvpn/release/2.6 $(lsb_release -cs) main" > /etc/apt/sources.list.d/openvpn-aptrepo.list
+
+#
+# Добавим репозиторий Debian Backports
+if [[ "$OS" == "debian" ]]; then
+	echo "deb http://deb.debian.org/debian $(lsb_release -cs)-backports main" > /etc/apt/sources.list.d/backports.list
+fi
+
+#
+# Ставим необходимые пакеты
+apt-get update
+apt-get install --reinstall -y git openvpn iptables easy-rsa gawk knot-resolver idn sipcalc python3-pip wireguard diffutils socat lua-cqueues ipset
+apt-get autoremove -y
+apt-get clean
+
+#
+# Клонируем репозиторий и устанавливаем dnslib
+rm -rf /tmp/dnslib
+git clone https://github.com/paulc/dnslib.git /tmp/dnslib
+PIP_BREAK_SYSTEM_PACKAGES=1 python3 -m pip install --force-reinstall --user /tmp/dnslib
+
+#
+# Клонируем репозиторий RandN_VPN-main
+rm -rf /tmp/randn_vpn-main
+git clone https://github.com/RazisID12/RandN_VPN-main.git /tmp/randn_vpn-main
+
+#
+# Сохраняем пользовательские настройки и пользовательские обработчики custom*.sh
+cp /opt/randn_vpn-main/config/* /tmp/randn_vpn-main/setup/opt/randn_vpn-main/config/ &>/dev/null || true
+cp /opt/randn_vpn-main/custom*.sh /tmp/randn_vpn-main/setup/opt/randn_vpn-main/ &>/dev/null || true
+
+#
+# Восстанавливаем из бэкапа пользовательские настройки и пользователей OpenVPN и WireGuard
+tar -xzf /opt/backup*.tar.gz &>/dev/null || true
+rm -f /opt/backup*.tar.gz &>/dev/null || true
+cp -r /opt/easyrsa3/* /tmp/randn_vpn-main/setup/etc/openvpn/easyrsa3 &>/dev/null || true
+cp /opt/wireguard/* /tmp/randn_vpn-main/setup/etc/wireguard &>/dev/null || true
+cp /opt/config/* /tmp/randn_vpn-main/setup/opt/randn_vpn-main/config &>/dev/null || true
+rm -rf /opt/easyrsa3
+rm -rf /opt/wireguard
+rm -rf /opt/config
+
+#
+# Сохраняем настройки
+echo "SETUP_DATE=$(date --iso-8601=seconds)
+OPENVPN_PATCH=${OPENVPN_PATCH}
+OPENVPN_DCO=${OPENVPN_DCO}
+RANDN_SVPN-MAIN_DNS=${RANDN_SVPN-MAIN_DNS}
+RANDN_FVPN-MAIN_DNS=${RANDN_FVPN-MAIN_DNS}
+BLOCK_ADS=${BLOCK_ADS}
+ALTERNATIVE_IP=${ALTERNATIVE_IP}
+OPENVPN_5080_5443_TCP=${OPENVPN_5080_5443_TCP}
+OPENVPN_5080_5443_UDP=${OPENVPN_5080_5443_UDP}
+OPENVPN_DUPLICATE=${OPENVPN_DUPLICATE}
+OPENVPN_LOG=${OPENVPN_LOG}
+SSH_PROTECTION=${SSH_PROTECTION}
+ATTACK_PROTECTION=${ATTACK_PROTECTION}
+OPENVPN_HOST=${OPENVPN_HOST}
+WIREGUARD_HOST=${WIREGUARD_HOST}
+ROUTE_ALL=${ROUTE_ALL}
+DISCORD_INCLUDE=${DISCORD_INCLUDE}
+CLOUDFLARE_INCLUDE=${CLOUDFLARE_INCLUDE}
+AMAZON_INCLUDE=${AMAZON_INCLUDE}
+HETZNER_INCLUDE=${HETZNER_INCLUDE}
+DIGITALOCEAN_INCLUDE=${DIGITALOCEAN_INCLUDE}
+OVH_INCLUDE=${OVH_INCLUDE}
+TELEGRAM_INCLUDE=${TELEGRAM_INCLUDE}
+GOOGLE_INCLUDE=${GOOGLE_INCLUDE}
+AKAMAI_INCLUDE=${AKAMAI_INCLUDE}" > /tmp/randn_vpn-main/setup/opt/randn_vpn-main/setup
+
+#
+# Выставляем разрешения
+find /tmp/randn_vpn-main -type f -exec chmod 644 {} +
+find /tmp/randn_vpn-main -type d -exec chmod 755 {} +
+find /tmp/randn_vpn-main -type f \( -name '*.sh' -o -name '*.py' \) -execdir chmod +x {} +
+
+# Копируем нужное, удаляем не нужное
+find /tmp/randn_vpn-main -name '.gitkeep' -delete
+rm -rf /opt/randn_vpn-main
+cp -r /tmp/randn_vpn-main/setup/* /
+rm -rf /tmp/dnslib
+rm -rf /tmp/randn_vpn-main
+
+#
+# Используем альтернативные диапазоны ip-адресов
+# 10.28.0.0/14 => 172.28.0.0/14
+if [[ "$ALTERNATIVE_IP" == "y" ]]; then
+	sed -i 's/10\.30\./172\.30\./g' /opt/randn_vpn-main/proxy.py
+	sed -i 's/10\.29\./172\.29\./g' /etc/knot-resolver/kresd.conf
+	sed -i 's/10\./172\./g' /etc/openvpn/server/*.conf
+	sed -i 's/10\./172\./g' /etc/wireguard/templates/*.conf
+	find /etc/wireguard -name '*.conf' -exec sed -i 's/s = 10\./s = 172\./g' {} +
+else
+	find /etc/wireguard -name '*.conf' -exec sed -i 's/s = 172\./s = 10\./g' {} +
+fi
+
+#
+# Настраиваем DNS в RandN_fVPN-main
+if [[ "$RANDN_FVPN-MAIN_DNS" == "2" ]]; then
+	# Quad9
+	sed -i '/push "dhcp-option DNS 1\.1\.1\.1"/,+1c push "dhcp-option DNS 9.9.9.10"\npush "dhcp-option DNS 149.112.112.10"' /etc/openvpn/server/RandN_fVPN-main*.conf
+	sed -i 's/1\.1\.1\.1, 1\.0\.0\.1/9.9.9.10, 149.112.112.10/' /etc/wireguard/templates/RandN_fVPN-main-client*.conf
+elif [[ "$RANDN_FVPN-MAIN_DNS" == "3" ]]; then
+	# Google
+	sed -i '/push "dhcp-option DNS 1\.1\.1\.1"/,+1c push "dhcp-option DNS 8.8.8.8"\npush "dhcp-option DNS 8.8.4.4"' /etc/openvpn/server/RandN_fVPN-main*.conf
+	sed -i 's/1\.1\.1\.1, 1\.0\.0\.1/8.8.8.8, 8.8.4.4/' /etc/wireguard/templates/RandN_fVPN-main-client*.conf
+elif [[ "$RANDN_FVPN-MAIN_DNS" == "4" ]]; then
+	# AdGuard
+	sed -i '/push "dhcp-option DNS 1\.1\.1\.1"/,+1c push "dhcp-option DNS 94.140.14.14"\npush "dhcp-option DNS 94.140.15.15"' /etc/openvpn/server/RandN_fVPN-main*.conf
+	sed -i 's/1\.1\.1\.1, 1\.0\.0\.1/94.140.14.14, 94.140.15.15/' /etc/wireguard/templates/RandN_fVPN-main-client*.conf
+elif [[ "$RANDN_FVPN-MAIN_DNS" == "5" ]]; then
+	# Comss
+	sed -i '/push "dhcp-option DNS 1\.1\.1\.1"/,+1c push "dhcp-option DNS 83.220.169.155"\npush "dhcp-option DNS 212.109.195.93"' /etc/openvpn/server/RandN_fVPN-main*.conf
+	sed -i 's/1\.1\.1\.1, 1\.0\.0\.1/83.220.169.155, 212.109.195.93/' /etc/wireguard/templates/RandN_fVPN-main-client*.conf
+elif [[ "$RANDN_FVPN-MAIN_DNS" == "6" ]]; then
+	# Xbox
+	sed -i '/push "dhcp-option DNS 1\.1\.1\.1"/,+1c push "dhcp-option DNS 176.99.11.77"\npush "dhcp-option DNS 80.78.247.254"' /etc/openvpn/server/RandN_fVPN-main*.conf
+	sed -i 's/1\.1\.1\.1, 1\.0\.0\.1/176.99.11.77, 80.78.247.254/' /etc/wireguard/templates/RandN_fVPN-main-client*.conf
+fi
+
+#
+# Настраиваем DNS в RandN_sVPN-main
+if [[ "$RANDN_SVPN-MAIN_DNS" == "2" ]]; then
+	# Cloudflare+Quad9
+	sed -i "s/'193\.58\.251\.251', '212\.92\.149\.149', '212\.92\.149\.150'/'1.1.1.1', '1.0.0.1', '9.9.9.10', '149.112.112.10'/" /etc/knot-resolver/kresd.conf
+elif [[ "$RANDN_SVPN-MAIN_DNS" == "3" ]]; then
+	# Comss
+	sed -i "s/'193\.58\.251\.251', '212\.92\.149\.149', '212\.92\.149\.150'/'83.220.169.155', '212.109.195.93'/" /etc/knot-resolver/kresd.conf
+	sed -i "s/'1\.1\.1\.1', '1\.0\.0\.1', '9\.9\.9\.10', '149\.112\.112\.10'/'83.220.169.155', '212.109.195.93'/" /etc/knot-resolver/kresd.conf
+elif [[ "$RANDN_SVPN-MAIN_DNS" == "4" ]]; then
+	# Xbox
+	sed -i "s/'193\.58\.251\.251', '212\.92\.149\.149', '212\.92\.149\.150'/'176.99.11.77', '80.78.247.254'/" /etc/knot-resolver/kresd.conf
+	sed -i "s/'1\.1\.1\.1', '1\.0\.0\.1', '9\.9\.9\.10', '149\.112\.112\.10'/'176.99.11.77', '80.78.247.254'/" /etc/knot-resolver/kresd.conf
+fi
+
+#
+# Запрещаем несколько одновременных подключений к OpenVPN для одного клиента
+if [[ "$OPENVPN_DUPLICATE" == "n" ]]; then
+	sed -i '/^duplicate-cn/s/^/#/' /etc/openvpn/server/*.conf
+fi
+
+#
+# Включим подробные логи в OpenVPN
+if [[ "$OPENVPN_LOG" == "y" ]]; then
+	sed -i '/^#\(verb\|log\)/s/^#//' /etc/openvpn/server/*.conf
+fi
+
+#
+# Загружаем и создаем списки исключений IP-адресов
+/opt/randn_vpn-main/doall.sh ip
+
+#
+# Настраиваем сервера OpenVPN и WireGuard/AmneziaWG для первого запуска
+# Пересоздаем для всех существующих пользователей файлы подключений
+# Если пользователей нет, то создаем новых пользователей для OpenVPN и WireGuard/AmneziaWG
+/opt/randn_vpn-main/client.sh 7
+
+#
+# Включим обновляемые службы
+systemctl enable kresd@1
+systemctl enable kresd@2
+systemctl enable randn_vpn-main
+systemctl enable randn_vpn-main-update
+systemctl enable randn_vpn-main-update.timer
+#systemctl enable openvpn-server@RandN_sVPN-main-udp
+#systemctl enable openvpn-server@RandN_sVPN-main-tcp
+#systemctl enable openvpn-server@RandN_fVPN-main-udp
+#systemctl enable openvpn-server@RandN_fVPN-main-tcp
+systemctl enable wg-quick@RandN_sVPN-main
+systemctl enable wg-quick@RandN_fVPN-main
+
+ERRORS=""
+
+if [[ "$OPENVPN_PATCH" != "0" ]]; then
+	if ! /opt/randn_vpn-main/patch-openvpn.sh "$OPENVPN_PATCH"; then
+		ERRORS+="\n\e[1;31mCensorship patch for OpenVPN has not installed!\e[0m Please run '/opt/randn_vpn-main/patch-openvpn.sh' after rebooting\n"
+	fi
+fi
+
+if [[ "$OPENVPN_DCO" == "y" ]]; then
+	if ! /opt/randn_vpn-main/openvpn-dco.sh y; then
+		ERRORS+="\n\e[1;31mOpenVPN DCO has not turn on!\e[0m Please run '/opt/randn_vpn-main/openvpn-dco.sh y' after rebooting\n"
+	fi
+fi
+
+#
+# Если есть ошибки, выводим их
+if [[ -n "$ERRORS" ]]; then
+	echo -e "$ERRORS"
+fi
+
+#
+# Создадим файл подкачки размером 512 Мб если его нет
+if [[ -z "$(swapon --show)" ]]; then
+	set +e
+	SWAPFILE="/swapfile"
+	SWAPSIZE=512
+	dd if=/dev/zero of=$SWAPFILE bs=1M count=$SWAPSIZE
+	chmod 600 "$SWAPFILE"
+	mkswap "$SWAPFILE"
+	swapon "$SWAPFILE"
+	echo "$SWAPFILE none swap sw 0 0" >> /etc/fstab
+fi
+
+echo
+echo -e '\e[1;32mRandN_VPN-main installed successfully!\e[0m'
+echo 'Rebooting...'
+
+#
+# Перезагружаем
+reboot
