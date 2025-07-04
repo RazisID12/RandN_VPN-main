@@ -200,18 +200,18 @@ addWireGuard(){
 
 	source /etc/wireguard/key
 	IPS="$(cat /etc/wireguard/ips)"
-	CLIENT_BLOCK_RANDN_SVPN-MAIN="$(sed -n "/^# Client = ${CLIENT_NAME}\$/,/^AllowedIPs/ {p; /^AllowedIPs/q}" /etc/wireguard/RandN_sVPN-main.conf)"
-	CLIENT_BLOCK_RANDN_FVPN-MAIN="$(sed -n "/^# Client = ${CLIENT_NAME}\$/,/^AllowedIPs/ {p; /^AllowedIPs/q}" /etc/wireguard/RandN_fVPN-main.conf)"
+	CLIENT_BLOCK_RANDN_SVPN_MAIN="$(sed -n "/^# Client = ${CLIENT_NAME}\$/,/^AllowedIPs/ {p; /^AllowedIPs/q}" /etc/wireguard/RandN_sVPN-main.conf)"
+	CLIENT_BLOCK_RANDN_FVPN_MAIN="$(sed -n "/^# Client = ${CLIENT_NAME}\$/,/^AllowedIPs/ {p; /^AllowedIPs/q}" /etc/wireguard/RandN_fVPN-main.conf)"
 
-	if [[ -n "$CLIENT_BLOCK_RANDN_SVPN-MAIN" ]]; then
-		CLIENT_PRIVATE_KEY="$(echo "$CLIENT_BLOCK_RANDN_SVPN-MAIN" | grep '# PrivateKey =' | cut -d '=' -f 2- | sed 's/ //g')"
-		CLIENT_PUBLIC_KEY="$(echo "$CLIENT_BLOCK_RANDN_SVPN-MAIN" | grep 'PublicKey =' | cut -d '=' -f 2- | sed 's/ //g')"
-		CLIENT_PRESHARED_KEY="$(echo "$CLIENT_BLOCK_RANDN_SVPN-MAIN" | grep 'PresharedKey =' | cut -d '=' -f 2- | sed 's/ //g')"
+	if [[ -n "$CLIENT_BLOCK_RANDN_SVPN_MAIN" ]]; then
+		CLIENT_PRIVATE_KEY="$(echo "$CLIENT_BLOCK_RANDN_SVPN_MAIN" | grep '# PrivateKey =' | cut -d '=' -f 2- | sed 's/ //g')"
+		CLIENT_PUBLIC_KEY="$(echo "$CLIENT_BLOCK_RANDN_SVPN_MAIN" | grep 'PublicKey =' | cut -d '=' -f 2- | sed 's/ //g')"
+		CLIENT_PRESHARED_KEY="$(echo "$CLIENT_BLOCK_RANDN_SVPN_MAIN" | grep 'PresharedKey =' | cut -d '=' -f 2- | sed 's/ //g')"
 		echo 'Client with that name already exists! Please enter different name for new client'
-	elif [[ -n "$CLIENT_BLOCK_RANDN_FVPN-MAIN" ]]; then
-		CLIENT_PRIVATE_KEY="$(echo "$CLIENT_BLOCK_RANDN_FVPN-MAIN" | grep '# PrivateKey =' | cut -d '=' -f 2- | sed 's/ //g')"
-		CLIENT_PUBLIC_KEY="$(echo "$CLIENT_BLOCK_RANDN_FVPN-MAIN" | grep 'PublicKey =' | cut -d '=' -f 2- | sed 's/ //g')"
-		CLIENT_PRESHARED_KEY="$(echo "$CLIENT_BLOCK_RANDN_FVPN-MAIN" | grep 'PresharedKey =' | cut -d '=' -f 2- | sed 's/ //g')"
+	elif [[ -n "$CLIENT_BLOCK_RANDN_FVPN_MAIN" ]]; then
+		CLIENT_PRIVATE_KEY="$(echo "$CLIENT_BLOCK_RANDN_FVPN_MAIN" | grep '# PrivateKey =' | cut -d '=' -f 2- | sed 's/ //g')"
+		CLIENT_PUBLIC_KEY="$(echo "$CLIENT_BLOCK_RANDN_FVPN_MAIN" | grep 'PublicKey =' | cut -d '=' -f 2- | sed 's/ //g')"
+		CLIENT_PRESHARED_KEY="$(echo "$CLIENT_BLOCK_RANDN_FVPN_MAIN" | grep 'PresharedKey =' | cut -d '=' -f 2- | sed 's/ //g')"
 		echo 'Client with that name already exists! Please enter different name for new client'
 	else
 		CLIENT_PRIVATE_KEY="$(wg genkey)"
