@@ -4,7 +4,7 @@ exec 2>/dev/null
 
 # 1. Внешний интерфейс ────────────────────────────────────────────────────────
 [[ -z "$1" ]] && INTERFACE="$(ip route | awk '/^default/{print $5;exit}')" || INTERFACE=$1
-EXT_IP=217.144.186.104
+EXT_IP=194.59.186.67
 
 # 2. NAT, поставленные UP-script ───────────────────────────────────────────────
 for NET in \
@@ -46,7 +46,7 @@ ip6tables -w -D OUTPUT -o lo -j ACCEPT
 ip6tables -w -D INPUT  -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
 
 # SSH и панели
-for IP4 in 217.144.186.104 150.241.64.91 37.230.147.37; do
+for IP4 in 194.59.186.67 150.241.64.91 37.230.147.37; do
     iptables -w -D INPUT -p tcp --dport 22   -s "$IP4" -j ACCEPT
     iptables -w -D INPUT -p tcp --dport 300  -s "$IP4" -j ACCEPT
     iptables -w -D INPUT -p tcp --dport 3000 -s "$IP4" -j ACCEPT
