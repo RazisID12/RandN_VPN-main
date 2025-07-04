@@ -82,8 +82,8 @@ echo
 echo '  * - Resolvers optimized for users in Russia'
 echo ' ** - Enable additional proxying and hide this server IP on some internet resources'
 echo '      Use only if this server is geolocated in Russia or problems accessing some internet resources'
-until [[ "$RANDN_SVPN-MAIN_DNS" =~ ^[1-4]$ ]]; do
-	read -rp 'DNS choice [1-4]: ' -e -i 1 RANDN_SVPN-MAIN_DNS
+until [[ "$RANDN_SVPN_MAIN_DNS" =~ ^[1-4]$ ]]; do
+	read -rp 'DNS choice [1-4]: ' -e -i 1 RANDN_SVPN_MAIN_DNS
 done
 echo
 echo -e 'Choose DNS resolvers for \e[1;32mRandN_fVPN-main\e[0m (RandN_fVPN-main-*):'
@@ -98,8 +98,8 @@ echo
 echo '  * - Resolvers supports EDNS Client Subnet'
 echo ' ** - Enable additional proxying and hide this server IP on some internet resources'
 echo '      Use only if this server is geolocated in Russia or problems accessing some internet resources'
-until [[ "$RANDN_FVPN-MAIN_DNS" =~ ^[1-6]$ ]]; do
-	read -rp 'DNS choice [1-6]: ' -e -i 1 RANDN_FVPN-MAIN_DNS
+until [[ "$RANDN_FVPN_MAIN_DNS" =~ ^[1-6]$ ]]; do
+	read -rp 'DNS choice [1-6]: ' -e -i 1 RANDN_FVPN_MAIN_DNS
 done
 echo
 until [[ "$BLOCK_ADS" =~ (y|n) ]]; do
@@ -375,8 +375,8 @@ rm -rf /opt/config
 echo "SETUP_DATE=$(date --iso-8601=seconds)
 OPENVPN_PATCH=${OPENVPN_PATCH}
 OPENVPN_DCO=${OPENVPN_DCO}
-RANDN_SVPN-MAIN_DNS=${RANDN_SVPN-MAIN_DNS}
-RANDN_FVPN-MAIN_DNS=${RANDN_FVPN-MAIN_DNS}
+RANDN_SVPN_MAIN_DNS=${RANDN_SVPN_MAIN_DNS}
+RANDN_FVPN_MAIN_DNS=${RANDN_FVPN_MAIN_DNS}
 BLOCK_ADS=${BLOCK_ADS}
 ALTERNATIVE_IP=${ALTERNATIVE_IP}
 OPENVPN_5080_5443_TCP=${OPENVPN_5080_5443_TCP}
@@ -426,23 +426,23 @@ fi
 
 #
 # Настраиваем DNS в RandN_fVPN-main
-if [[ "$RANDN_FVPN-MAIN_DNS" == "2" ]]; then
+if [[ "$RANDN_FVPN_MAIN_DNS" == "2" ]]; then
 	# Quad9
 	sed -i '/push "dhcp-option DNS 1\.1\.1\.1"/,+1c push "dhcp-option DNS 9.9.9.10"\npush "dhcp-option DNS 149.112.112.10"' /etc/openvpn/server/RandN_fVPN-main*.conf
 	sed -i 's/1\.1\.1\.1, 1\.0\.0\.1/9.9.9.10, 149.112.112.10/' /etc/wireguard/templates/RandN_fVPN-main-client*.conf
-elif [[ "$RANDN_FVPN-MAIN_DNS" == "3" ]]; then
+elif [[ "$RANDN_FVPN_MAIN_DNS" == "3" ]]; then
 	# Google
 	sed -i '/push "dhcp-option DNS 1\.1\.1\.1"/,+1c push "dhcp-option DNS 8.8.8.8"\npush "dhcp-option DNS 8.8.4.4"' /etc/openvpn/server/RandN_fVPN-main*.conf
 	sed -i 's/1\.1\.1\.1, 1\.0\.0\.1/8.8.8.8, 8.8.4.4/' /etc/wireguard/templates/RandN_fVPN-main-client*.conf
-elif [[ "$RANDN_FVPN-MAIN_DNS" == "4" ]]; then
+elif [[ "$RANDN_FVPN_MAIN_DNS" == "4" ]]; then
 	# AdGuard
 	sed -i '/push "dhcp-option DNS 1\.1\.1\.1"/,+1c push "dhcp-option DNS 94.140.14.14"\npush "dhcp-option DNS 94.140.15.15"' /etc/openvpn/server/RandN_fVPN-main*.conf
 	sed -i 's/1\.1\.1\.1, 1\.0\.0\.1/94.140.14.14, 94.140.15.15/' /etc/wireguard/templates/RandN_fVPN-main-client*.conf
-elif [[ "$RANDN_FVPN-MAIN_DNS" == "5" ]]; then
+elif [[ "$RANDN_FVPN_MAIN_DNS" == "5" ]]; then
 	# Comss
 	sed -i '/push "dhcp-option DNS 1\.1\.1\.1"/,+1c push "dhcp-option DNS 83.220.169.155"\npush "dhcp-option DNS 212.109.195.93"' /etc/openvpn/server/RandN_fVPN-main*.conf
 	sed -i 's/1\.1\.1\.1, 1\.0\.0\.1/83.220.169.155, 212.109.195.93/' /etc/wireguard/templates/RandN_fVPN-main-client*.conf
-elif [[ "$RANDN_FVPN-MAIN_DNS" == "6" ]]; then
+elif [[ "$RANDN_FVPN_MAIN_DNS" == "6" ]]; then
 	# Xbox
 	sed -i '/push "dhcp-option DNS 1\.1\.1\.1"/,+1c push "dhcp-option DNS 176.99.11.77"\npush "dhcp-option DNS 80.78.247.254"' /etc/openvpn/server/RandN_fVPN-main*.conf
 	sed -i 's/1\.1\.1\.1, 1\.0\.0\.1/176.99.11.77, 80.78.247.254/' /etc/wireguard/templates/RandN_fVPN-main-client*.conf
@@ -450,14 +450,14 @@ fi
 
 #
 # Настраиваем DNS в RandN_sVPN-main
-if [[ "$RANDN_SVPN-MAIN_DNS" == "2" ]]; then
+if [[ "$RANDN_SVPN_MAIN_DNS" == "2" ]]; then
 	# Cloudflare+Quad9
 	sed -i "s/'193\.58\.251\.251', '212\.92\.149\.149', '212\.92\.149\.150'/'1.1.1.1', '1.0.0.1', '9.9.9.10', '149.112.112.10'/" /etc/knot-resolver/kresd.conf
-elif [[ "$RANDN_SVPN-MAIN_DNS" == "3" ]]; then
+elif [[ "$RANDN_SVPN_MAIN_DNS" == "3" ]]; then
 	# Comss
 	sed -i "s/'193\.58\.251\.251', '212\.92\.149\.149', '212\.92\.149\.150'/'83.220.169.155', '212.109.195.93'/" /etc/knot-resolver/kresd.conf
 	sed -i "s/'1\.1\.1\.1', '1\.0\.0\.1', '9\.9\.9\.10', '149\.112\.112\.10'/'83.220.169.155', '212.109.195.93'/" /etc/knot-resolver/kresd.conf
-elif [[ "$RANDN_SVPN-MAIN_DNS" == "4" ]]; then
+elif [[ "$RANDN_SVPN_MAIN_DNS" == "4" ]]; then
 	# Xbox
 	sed -i "s/'193\.58\.251\.251', '212\.92\.149\.149', '212\.92\.149\.150'/'176.99.11.77', '80.78.247.254'/" /etc/knot-resolver/kresd.conf
 	sed -i "s/'1\.1\.1\.1', '1\.0\.0\.1', '9\.9\.9\.10', '149\.112\.112\.10'/'176.99.11.77', '80.78.247.254'/" /etc/knot-resolver/kresd.conf
