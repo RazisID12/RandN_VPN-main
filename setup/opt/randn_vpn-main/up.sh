@@ -15,7 +15,7 @@ add()  { local t=$1 c=$2; shift 2; ipt  -t "$t" -C "$c" "$@" 2>/dev/null || ipt 
 INTERFACE=$(ip route | awk '/^default/{print $5;exit}')
 [[ -z "$INTERFACE" ]] && { echo 'Default interface not found'; exit 1; }
 
-EXT_IP=194.59.186.67
+EXT_IP=95.164.123.146
 source /opt/randn_vpn-main/setup            # даёт $ALTERNATIVE_IP
 [[ "$ALTERNATIVE_IP" == "y" ]] && IP="172" || IP="10"
 
@@ -67,17 +67,17 @@ ins filter OUTPUT -o lo -j ACCEPT
 ins filter INPUT  -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
 
 # SSH (только доверенные)
-for IP4 in 194.59.186.67 150.241.64.91 37.230.147.37; do
+for IP4 in 95.164.123.146 150.241.64.91 37.230.147.37; do
   ins filter INPUT -p tcp --dport 22   -s $IP4 -j ACCEPT
 done
 
 # Панель AdGuard (только доверенные)
-for IP4 in 194.59.186.67 150.241.64.91 37.230.147.37; do
+for IP4 in 95.164.123.146 150.241.64.91 37.230.147.37; do
   ins filter INPUT -p tcp --dport 300  -s $IP4 -j ACCEPT
 done
 
 # Preset-UI AdGuard (только доверенные)
-for IP4 in 194.59.186.67 150.241.64.91 37.230.147.37; do
+for IP4 in 95.164.123.146 150.241.64.91 37.230.147.37; do
   ins filter INPUT -p tcp --dport 3000 -s $IP4 -j ACCEPT
 done
 
