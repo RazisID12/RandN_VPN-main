@@ -19,6 +19,11 @@ EXT_IP=95.164.123.146
 source /opt/randn_vpn-main/setup            # даёт $ALTERNATIVE_IP
 [[ "$ALTERNATIVE_IP" == "y" ]] && IP="172" || IP="10"
 
+# --- trusted endpoints -------------------------------------------------------
+TRUSTED_IPV4="95.164.123.146 150.241.64.91 217.144.186.104 37.230.147.37"
+# если нужны IPv6-адреса – допишите:
+TRUSTED_IPV6="2a12:bec4:1460:150::2"
+
 # ── 3. Очистка старых правил ───────────────────────────────────────────────────
 /opt/randn_vpn-main/down.sh "$INTERFACE"
 
@@ -38,8 +43,8 @@ sysctl -qw net.ipv4.conf.all.send_redirects=0
 sysctl -qw net.ipv4.conf.default.send_redirects=0
 
 # ── 5. ipset-block ─────────────────────────────────────────────────────────────
-ipset create ipset-block  hash:ip family inet  timeout 0 -exist
-ipset create ipset-block6 hash:ip family inet6 timeout 0 -exist
+ipset create ipset-block  hash:ip family inet  timeout 0 comment maxelem 200000 -exist
+ipset create ipset-block6 hash:ip family inet6 timeout 0 comment maxelem 200000 -exist
 
 # 5-bis. Восстановление банов между перезагрузками
 mkdir -p /var/lib/ipset
@@ -67,17 +72,17 @@ ins filter OUTPUT -o lo -j ACCEPT
 ins filter INPUT  -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
 
 # SSH (только доверенные)
-for IP4 in 95.164.123.146 150.241.64.91 37.230.147.37; do
+for IP4 in $TRUSTED_IPV4; do
   ins filter INPUT -p tcp --dport 22   -s $IP4 -j ACCEPT
 done
 
 # Панель AdGuard (только доверенные)
-for IP4 in 95.164.123.146 150.241.64.91 37.230.147.37; do
+for IP4 in $TRUSTED_IPV4; do
   ins filter INPUT -p tcp --dport 300  -s $IP4 -j ACCEPT
 done
 
 # Preset-UI AdGuard (только доверенные)
-for IP4 in 95.164.123.146 150.241.64.91 37.230.147.37; do
+for IP4 in $TRUSTED_IPV4; do
   ins filter INPUT -p tcp --dport 3000 -s $IP4 -j ACCEPT
 done
 
@@ -92,7 +97,6 @@ ins filter INPUT -p udp --dport 443 -j ACCEPT   # HTTP-3
 ins filter INPUT -p udp --dport 853 -j ACCEPT   # DoQ
 
 # VPN-порты
-ins filter INPUT -p udp --dport 51820 -j ACCEPT              # WireGuard
 for P in 50080 50443 51080 51443; do                         # OpenVPN / Amnezia
   ins filter INPUT -p udp --dport $P -j ACCEPT
   ins filter INPUT -p tcp --dport $P -j ACCEPT
@@ -119,8 +123,10 @@ ins filter INPUT -p tcp --tcp-flags ALL FIN,URG,PSH     -j DROP
 ins filter INPUT -p tcp --tcp-flags SYN,RST SYN,RST     -j DROP
 
 ## 3) ICMP-echo limit
-ins filter INPUT -p icmp --icmp-type echo-request \
-      -m limit --limit 4/second --limit-burst 20 -j ACCEPT
+for IP4 in $TRUSTED_IPV4; do
+  ins filter INPUT -p icmp --icmp-type echo-request -s "$IP4" \
+       -m limit --limit 4/second --limit-burst 20 -j ACCEPT
+done
 
 ## 3-bis) служебные ICMP-типы
 ins filter INPUT -p icmp --icmp-type 3 -j ACCEPT   # Destination-Unreach
@@ -142,10 +148,10 @@ ins6 filter INPUT -p tcp --tcp-flags ALL FIN,URG,PSH     -j DROP
 ins6 filter INPUT -p tcp --tcp-flags SYN,RST SYN,RST     -j DROP
 
 ## 3) ICMPv6-echo limit
-ins6 filter INPUT -p icmpv6 --icmpv6-type 128 \
-      -m limit --limit 4/second --limit-burst 20 -j ACCEPT
-ins6 filter INPUT -p icmpv6 --icmpv6-type 129 \
-      -m limit --limit 4/second --limit-burst 20 -j ACCEPT
+for IP6 in $TRUSTED_IPV6; do
+  ins6 filter INPUT -p icmpv6 --icmpv6-type 128 -s "$IP6" \
+        -m limit --limit 4/second --limit-burst 20 -j ACCEPT
+done
 
 ## 4) Anti-spoofing
 ins6 filter INPUT -i "$INTERFACE" -s ff00::/8  -j DROP

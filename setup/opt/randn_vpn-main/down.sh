@@ -6,6 +6,11 @@ exec 2>/dev/null
 [[ -z "$1" ]] && INTERFACE="$(ip route | awk '/^default/{print $5;exit}')" || INTERFACE=$1
 EXT_IP=95.164.123.146
 
+# --- trusted endpoints -------------------------------------------------------
+TRUSTED_IPV4="95.164.123.146 150.241.64.91 217.144.186.104 37.230.147.37"
+# если нужны IPv6-адреса – допишите:
+TRUSTED_IPV6="2a12:bec4:1460:150::2"
+
 # 2. NAT, поставленные UP-script ───────────────────────────────────────────────
 for NET in \
     10.29.0.0/22 10.29.4.0/22 10.29.8.0/24 \
@@ -46,7 +51,7 @@ ip6tables -w -D OUTPUT -o lo -j ACCEPT
 ip6tables -w -D INPUT  -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
 
 # SSH и панели
-for IP4 in 95.164.123.146 150.241.64.91 37.230.147.37; do
+for IP4 in $TRUSTED_IPV4; do
     iptables -w -D INPUT -p tcp --dport 22   -s "$IP4" -j ACCEPT
     iptables -w -D INPUT -p tcp --dport 300  -s "$IP4" -j ACCEPT
     iptables -w -D INPUT -p tcp --dport 3000 -s "$IP4" -j ACCEPT
@@ -69,12 +74,8 @@ done
 for T in 1 2 3 4 144 145; do
     ip6tables -w -D INPUT -p icmpv6 --icmpv6-type $T -j ACCEPT
 done
-# лимит на Echo-Reply 129
-ip6tables -w -D INPUT -p icmpv6 --icmpv6-type 129 \
-          -m limit --limit 4/second --limit-burst 20 -j ACCEPT
 
 # VPN-порты
-iptables -w -D INPUT -p udp --dport 51820 -j ACCEPT
 for P in 50080 50443 51080 51443; do
     iptables -w -D INPUT -p udp --dport $P -j ACCEPT
     iptables -w -D INPUT -p tcp --dport $P -j ACCEPT
@@ -92,8 +93,10 @@ iptables -w -D INPUT -p tcp --syn \
 iptables -w -D INPUT -p tcp --tcp-flags ALL NONE        -j DROP
 iptables -w -D INPUT -p tcp --tcp-flags ALL FIN,URG,PSH -j DROP
 iptables -w -D INPUT -p tcp --tcp-flags SYN,RST SYN,RST -j DROP
-iptables -w -D INPUT -p icmp --icmp-type echo-request \
-         -m limit --limit 4/second --limit-burst 20 -j ACCEPT
+for IP4 in $TRUSTED_IPV4; do
+  iptables -w -D INPUT -p icmp --icmp-type echo-request -s "$IP4" \
+           -m limit --limit 4/second --limit-burst 20 -j ACCEPT
+done
 # служебные ICMP-типы
 iptables -w -D INPUT -p icmp --icmp-type 3 -j ACCEPT
 iptables -w -D INPUT -p icmp --icmp-type 4 -j ACCEPT
@@ -107,8 +110,10 @@ ip6tables -w -D INPUT -p tcp --syn \
 ip6tables -w -D INPUT -p tcp --tcp-flags ALL NONE        -j DROP
 ip6tables -w -D INPUT -p tcp --tcp-flags ALL FIN,URG,PSH -j DROP
 ip6tables -w -D INPUT -p tcp --tcp-flags SYN,RST SYN,RST -j DROP
-ip6tables -w -D INPUT -p icmpv6 --icmpv6-type 128 \
-          -m limit --limit 4/second --limit-burst 20 -j ACCEPT
+for IP6 in $TRUSTED_IPV6; do
+  ip6tables -w -D INPUT -p icmpv6 --icmpv6-type 128 -s "$IP6" \
+            -m limit --limit 4/second --limit-burst 20 -j ACCEPT
+done
 ip6tables -w -D INPUT -i "$INTERFACE" -s ff00::/8  -j DROP
 ip6tables -w -D INPUT -i "$INTERFACE" -s fe80::/10 -j DROP
 ip6tables -w -D INPUT -s ::1/128 ! -i lo -j DROP
